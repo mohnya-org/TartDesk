@@ -2,13 +2,13 @@ name: Release macOS App
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version without the v prefix"
-        required: true
+        description: "Optional stable version without v (e.g. 1.5.0). Omit to increment the latest patch."
+        required: false
 
 concurrency:
   group: release-macos-app
@@ -18,36 +18,36 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  prepare-release:
+    if: github.ref == 'refs/heads/main'
     runs-on:
       - self-hosted
       - macOS
-
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      should_release: ${{ steps.metadata.outputs.should_release }}
     steps:
-      - name: Check out repository
+      - name: Check out triggering commit
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Test release version selection and publication
+        run: |
+          python3 -B scripts/test-release-version.py
+          python3 -B scripts/test-publish-release.py
 
       - name: Resolve release metadata
+        id: metadata
         env:
-          INPUT_VERSION: ${{ github.event.inputs.version }}
-        run: |
-          set -euo pipefail
-
-          if [[ -n "${INPUT_VERSION:-}" ]]; then
-            VERSION="$INPUT_VERSION"
-            TAG="v$VERSION"
-          else
-            TAG="${GITHUB_REF_NAME}"
-            VERSION="${TAG#v}"
-          fi
-
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "ZIP_NAME=TartDesk-$VERSION-macOS.zip" >> "$GITHUB_ENV"
-          echo "ZIP_PATH=$GITHUB_WORKSPACE/dist/TartDesk-$VERSION-macOS.zip" >> "$GITHUB_ENV"
-          echo "CHECKSUM_PATH=$GITHUB_WORKSPACE/dist/TartDesk-$VERSION-macOS.zip.sha256" >> "$GITHUB_ENV"
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: python3 scripts/release-version.py
 
       - name: Validate update signing configuration
+        if: steps.metadata.outputs.should_release == 'true'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
@@ -58,6 +58,33 @@ jobs:
             exit 1
           }
           python3 -c 'import base64, os; assert len(base64.b64decode(os.environ["SPARKLE_PUBLIC_ED_KEY"], validate=True)) == 32, "Invalid Sparkle public key"'
+
+      - name: Report already published commit
+        if: steps.metadata.outputs.should_release != 'true'
+        run: echo "This commit already has a published stable release."
+
+  release:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.should_release == 'true'
+    runs-on:
+      - self-hosted
+      - macOS
+    env:
+      VERSION: ${{ needs.prepare-release.outputs.version }}
+      TAG: ${{ needs.prepare-release.outputs.tag }}
+    steps:
+      - name: Check out triggering commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set archive paths
+        run: |
+          {
+            echo "ZIP_PATH=$GITHUB_WORKSPACE/dist/TartDesk-$VERSION-macOS.zip"
+            echo "CHECKSUM_PATH=$GITHUB_WORKSPACE/dist/TartDesk-$VERSION-macOS.zip.sha256"
+          } >> "$GITHUB_ENV"
 
       - name: Import Developer ID certificate
         env:
@@ -99,6 +126,13 @@ jobs:
         env:
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: APP_VERSION="$VERSION" BUILD_ARCH=arm64 ./scripts/build-app.sh
+
+      - name: Verify packaged release version
+        run: |
+          set -euo pipefail
+          PLIST="dist/TartDesk.app/Contents/Info.plist"
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" == "$VERSION" ]]
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" == "$VERSION" ]]
 
       - name: Verify app architecture
         run: |
@@ -157,18 +191,10 @@ jobs:
           SPARKLE_BIN: .build/artifacts/sparkle/Sparkle/bin
         run: bash scripts/generate-appcast.sh
 
-      - name: Create or update GitHub Release
+      - name: Publish complete GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml --clobber
-          else
-            gh release create "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml \
-              --title "$TAG" \
-              --generate-notes
-          fi
+        run: bash scripts/publish-release.sh
 
       - name: Cleanup signing keychain
         if: always()
