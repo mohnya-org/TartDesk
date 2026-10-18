@@ -14,6 +14,12 @@ struct TartDeskApp: App {
                     configureMainWindow()
                 }
         }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                SoftwareUpdateView()
+                    .environmentObject(delegate.updates)
+            }
+        }
     }
 
     private func configureMainWindow() {
@@ -30,12 +36,15 @@ struct TartDeskApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    let updates = UpdateController()
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        updates.start()
         NSApp.activate(ignoringOtherApps: true)
     }
 }

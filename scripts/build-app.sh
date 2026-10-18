@@ -33,6 +33,10 @@ fi
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$BIN_PATH" "$MACOS_DIR/$APP_NAME"
+mkdir -p "$CONTENTS_DIR/Frameworks"
+SPARKLE_FRAMEWORK="$ROOT_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+[[ -d "$SPARKLE_FRAMEWORK" ]] || { echo "Sparkle framework not found: $SPARKLE_FRAMEWORK" >&2; exit 1; }
+ditto "$SPARKLE_FRAMEWORK" "$CONTENTS_DIR/Frameworks/Sparkle.framework"
 if [[ -f "$ICON_PATH" ]]; then
   cp "$ICON_PATH" "$RESOURCES_DIR/AppIcon.icns"
 fi
@@ -66,12 +70,20 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
   <true/>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+  <key>SUFeedURL</key>
+  <string>https://github.com/mohnya-org/TartDesk/releases/latest/download/appcast.xml</string>
+  <key>SUPublicEDKey</key>
+  <string>${SPARKLE_PUBLIC_ED_KEY:-}</string>
+  <key>SUEnableAutomaticChecks</key>
+  <true/>
+  <key>SUAutomaticallyUpdate</key>
+  <false/>
 </dict>
 </plist>
 PLIST
 
 if command -v codesign >/dev/null 2>&1; then
-  codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+  codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1
 fi
 
 echo "Built app bundle: $APP_DIR"
