@@ -135,6 +135,9 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -n "${SIGNING_TEMP_DIR:-}" && -d "$SIGNING_TEMP_DIR" ]]; then
+            cleanup_status=0
+            python3 scripts/signing-keychain.py detach "$SIGNING_TEMP_DIR/signing.keychain-db" || cleanup_status=$?
             security delete-keychain "$SIGNING_TEMP_DIR/signing.keychain-db" >/dev/null 2>&1 || true
             rm -rf "$SIGNING_TEMP_DIR"
+            exit "$cleanup_status"
           fi

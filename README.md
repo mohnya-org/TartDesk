@@ -115,9 +115,11 @@ secrets fail before the build; secret values are never printed.
 Distribution builds sign Sparkle's nested components and then TartDesk with a
 matching Developer ID Application certificate, Hardened Runtime, and timestamps.
 This native SwiftUI app requires no additional entitlements. CI uses an isolated
-temporary keychain without changing the runner's default or search list, and
-cleans up credentials on exit. After Apple accepts notarization, CI staples the
-ticket and creates a ZIP without AppleDouble metadata. It extracts that exact ZIP
+temporary keychain without changing the runner's default. During signing it appends
+that keychain to the existing search list, then removes only its own entry while
+preserving other jobs' entries. Search-list updates are serialized between TartDesk
+jobs, and credentials are cleaned up on exit. After Apple accepts notarization,
+CI staples the ticket and creates a ZIP without AppleDouble metadata. It extracts that exact ZIP
 and checks the signature, team, ticket, and Gatekeeper assessment before generating
 the checksum and Sparkle signature or publishing. A failed check blocks publication.
 
