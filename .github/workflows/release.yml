@@ -10,6 +10,10 @@ on:
         description: "Release version without the v prefix"
         required: true
 
+concurrency:
+  group: release-macos-app
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -42,6 +46,18 @@ jobs:
           echo "ZIP_NAME=TartDesk-$VERSION-macOS.zip" >> "$GITHUB_ENV"
           echo "ZIP_PATH=$GITHUB_WORKSPACE/dist/TartDesk-$VERSION-macOS.zip" >> "$GITHUB_ENV"
           echo "CHECKSUM_PATH=$GITHUB_WORKSPACE/dist/TartDesk-$VERSION-macOS.zip.sha256" >> "$GITHUB_ENV"
+
+      - name: Validate update signing configuration
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$SPARKLE_PRIVATE_KEY" && -n "$SPARKLE_PUBLIC_ED_KEY" ]] || {
+            echo "Configure SPARKLE_PRIVATE_KEY and SPARKLE_PUBLIC_ED_KEY repository secrets before releasing." >&2
+            exit 1
+          }
+          python3 -c 'import base64, os; assert len(base64.b64decode(os.environ["SPARKLE_PUBLIC_ED_KEY"], validate=True)) == 32, "Invalid Sparkle public key"'
 
       - name: Import Developer ID certificate
         env:
@@ -80,6 +96,8 @@ jobs:
           echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
       - name: Build app bundle
+        env:
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: APP_VERSION="$VERSION" BUILD_ARCH=arm64 ./scripts/build-app.sh
 
       - name: Verify app architecture
@@ -93,8 +111,7 @@ jobs:
       - name: Sign app bundle
         run: |
           set -euo pipefail
-          codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" "dist/TartDesk.app"
-          codesign --verify --deep --strict --verbose=2 "dist/TartDesk.app"
+          bash scripts/sign-app.sh "dist/TartDesk.app"
 
       - name: Prepare App Store Connect API key
         env:
@@ -134,15 +151,21 @@ jobs:
           ditto -c -k --keepParent "dist/TartDesk.app" "$ZIP_PATH"
           shasum -a 256 "$ZIP_PATH" > "$CHECKSUM_PATH"
 
+      - name: Generate signed Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_BIN: .build/artifacts/sparkle/Sparkle/bin
+        run: bash scripts/generate-appcast.sh
+
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" --clobber
+            gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml --clobber
           else
-            gh release create "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" \
+            gh release create "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml \
               --title "$TAG" \
               --generate-notes
           fi

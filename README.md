@@ -116,3 +116,32 @@ See the official `Tart` repository and its license for details:
 
 - <https://github.com/cirruslabs/tart>
 - <https://github.com/cirruslabs/tart/blob/main/LICENSE>
+
+## 自動アップデート（Sparkle 2）
+
+アプリは定期的に更新を確認し、Sparkle 標準の画面でダウンロード・インストール・再起動します。
+「Automatically check for updates」で定期チェックを切り替え、「Check for Updates…」で手動確認できます。
+更新操作は Prism Window / FinderOne ではメニューバーのパネル、TartDesk ではアプリメニューにあります。
+
+配布前に GitHub Actions の repository secrets を設定してください。
+
+- `SPARKLE_PRIVATE_KEY`: Sparkle の `generate_keys -x` で書き出した秘密鍵。
+- `SPARKLE_PUBLIC_ED_KEY`: 同じ鍵の `generate_keys -p` が表示する公開鍵。
+
+Sparkle のツールは SPM ビルド後の `.build/artifacts/sparkle/Sparkle/bin`、
+Xcode では DerivedData の `SourcePackages/artifacts/sparkle/Sparkle/bin` にあります。
+`generate_keys --account <app-name>` で鍵を一度だけ生成し、同じ `--account` を
+`-p` と `-x` にも指定します。秘密鍵はリポジトリに保存せず、安全にバックアップしてください。
+更新を継続できるよう、リリースごとに鍵を生成し直さないでください。
+
+ワークフローは公開鍵をアプリに埋め込み、公証・staple 後の最終 ZIP に署名し、
+`appcast.xml` を同じ GitHub Release に添付します。フィードは
+`https://github.com/mohnya-org/TartDesk/releases/latest/download/appcast.xml` です。
+公開リポジトリの通常リリースが対象です。ZIP とフィードは一緒に公開してください。
+次回リリースではバージョンを上げ、`CFBundleVersion` も必ず増加させます
+（Prism Window / FinderOne は Actions の run number、TartDesk はリリースバージョン）。
+
+秘密鍵が未設定ならリリースは失敗して停止します。公開鍵を省略した開発ビルドでは更新は無効です。
+ローカルで有効にするには、SPM の build-app.sh に `SPARKLE_PUBLIC_ED_KEY` を渡すか、
+FinderOne のビルド済み Info.plist の `SUPublicEDKey` に同じ公開鍵を設定してから署名します。
+既存の自動更新未対応版からは、最初の対応版だけ手動でインストールする必要があります。
