@@ -36,7 +36,7 @@ cp "$BIN_PATH" "$MACOS_DIR/$APP_NAME"
 mkdir -p "$CONTENTS_DIR/Frameworks"
 SPARKLE_FRAMEWORK="$ROOT_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 [[ -d "$SPARKLE_FRAMEWORK" ]] || { echo "Sparkle framework not found: $SPARKLE_FRAMEWORK" >&2; exit 1; }
-ditto "$SPARKLE_FRAMEWORK" "$CONTENTS_DIR/Frameworks/Sparkle.framework"
+ditto --norsrc --noextattr "$SPARKLE_FRAMEWORK" "$CONTENTS_DIR/Frameworks/Sparkle.framework"
 if [[ -f "$ICON_PATH" ]]; then
   cp "$ICON_PATH" "$RESOURCES_DIR/AppIcon.icns"
 fi
@@ -82,7 +82,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 </plist>
 PLIST
 
-if command -v codesign >/dev/null 2>&1; then
+if [[ "${DISTRIBUTION_BUILD:-0}" != 1 ]] && command -v codesign >/dev/null 2>&1; then
   codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1
 fi
 
