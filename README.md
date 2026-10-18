@@ -65,21 +65,19 @@ brew install cirruslabs/cli/tart
 
 ## Release Workflow
 
-General distribution uses the notarized GitHub Actions flow in [`.github/workflows/release.yml`](/Users/mohnya/Projects/Mohnya/tartdesk/.github/workflows/release.yml).
+General distribution uses the notarized GitHub Actions flow in [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
-Push a version tag to trigger the workflow:
-
-```bash
-git tag v0.0.1
-git push origin v0.0.1
-```
+Merge to `main` to trigger the workflow. CI increments the latest stable patch
+and injects it into the app without a version-bump commit. Manual dispatch on
+`main` accepts an optional newer version for minor/major releases.
 
 The workflow runs on the self-hosted macOS runner and:
 
 - builds `TartDesk.app`
 - signs it with `Developer ID Application`
 - notarizes and staples it
-- uploads the final zip to GitHub Releases
+- tags the built commit only after artifacts are ready
+- uploads the ZIP, checksum, and appcast to a draft, then publishes it
 
 You can also run the workflow manually from the GitHub Actions UI when needed.
 
@@ -138,8 +136,25 @@ Xcode では DerivedData の `SourcePackages/artifacts/sparkle/Sparkle/bin` に�
 `appcast.xml` を同じ GitHub Release に添付します。フィードは
 `https://github.com/mohnya-org/TartDesk/releases/latest/download/appcast.xml` です。
 公開リポジトリの通常リリースが対象です。ZIP とフィードは一緒に公開してください。
-次回リリースではバージョンを上げ、`CFBundleVersion` も必ず増加させます
-（Prism Window / FinderOne は Actions の run number、TartDesk はリリースバージョン）。
+main への push（PR マージを含む）で次の `vX.Y.Z` を自動採番します。
+通常は既存の正式版タグの最大バージョンからパッチ番号を 1 増やします。
+他のコミットで使われた未公開タグも予約済みとして飛ばし、タグを上書きしません。
+初回タグがない場合は `v0.0.1` です。ソースのバージョンを書き換えるコミットは不要です。
+Actions の手動実行では main を選び、任意で `version` に `1.5.0` のような
+新しい正式版を指定できます。空欄なら自動採番します。
+
+採番値を配布アプリのバージョンと ZIP 名に埋め込みます。
+`CFBundleVersion` は Prism Window / FinderOne では Actions の run number、
+TartDesk では採番したリリースバージョンです。
+ビルド・署名・公証・フィード生成後にトリガー元コミットへタグを作り、
+ZIP・チェックサム・appcast のアップロードが全部成功してから draft を公開します。
+これにより Release 公開 Webhook は必要な成果物がそろった状態で通知されます。
+
+失敗した場合は同じ Actions 実行を再実行できます。途中で作成済みの同一コミットの
+タグ・draft は再利用し、公開済みなら何も変更しません。新しい正式版より古い
+ソースを再公開する実行は拒否します。リリースは直列実行し、実行中のものは中止しません。
+GitHub Actions の concurrency により、短時間にマージが続くと待機中の実行は最新のものに
+置き換わる場合があります。その場合は最新コミットに含まれる変更をまとめて公開します。
 
 秘密鍵が未設定ならリリースは失敗して停止します。公開鍵を省略した開発ビルドでは更新は無効です。
 ローカルで有効にするには、SPM の build-app.sh に `SPARKLE_PUBLIC_ED_KEY` を渡すか、
