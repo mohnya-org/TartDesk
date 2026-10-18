@@ -9,6 +9,7 @@ python3 scripts/release-security.py preflight
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/tartdesk-signing.XXXXXXXX")
 keychain="$work/signing.keychain-db"
 cleanup() {
+  python3 scripts/signing-keychain.py detach "$keychain" || true
   security delete-keychain "$keychain" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -19,7 +20,7 @@ trap 'exit 143' TERM
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   printf 'SIGNING_TEMP_DIR=%s\n' "$work" >> "$GITHUB_ENV"
 fi
-# Do not change the user's default keychain or keychain search list.
+# Keep the default keychain unchanged; register only our temporary search entry.
 password=$(openssl rand -hex 32)
 python3 scripts/release-security.py decode-certificate "$work/certificate.p12"
 printf '%s' "$APPLE_API_PRIVATE_KEY" > "$work/api.p8"
@@ -42,7 +43,9 @@ app=dist/TartDesk.app
 # Remove filesystem metadata before signing, never after signing.
 xattr -cr "$app"
 find "$app" -name '._*' -type f -delete
+python3 scripts/signing-keychain.py attach "$keychain"
 bash scripts/sign-app.sh "$app"
+python3 scripts/signing-keychain.py detach "$keychain"
 metadata=$(codesign -dv --verbose=4 "$app" 2>&1)
 grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<< "$metadata"
 archive() {

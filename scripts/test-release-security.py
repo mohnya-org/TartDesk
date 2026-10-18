@@ -87,6 +87,22 @@ args = sys.argv[1:]
 failure = os.environ['FAILURE']
 with open('calls', 'a') as log:
     log.write(name + ' ' + (args[0] if args else '') + '\n')
+if name == 'security' and args[0] == 'list-keychains':
+    state = pathlib.Path('search-list.json')
+    entries = json.loads(state.read_text()) if state.exists() else ['/fixture/login.keychain-db']
+    if '-s' in args:
+        entries = args[args.index('-s') + 1:]
+        state.write_text(json.dumps(entries))
+    else:
+        for entry in entries:
+            print(json.dumps(entry))
+if name == 'codesign' and args[0] == '--force':
+    entries = json.loads(pathlib.Path('search-list.json').read_text())
+    assert args[args.index('--keychain') + 1] in entries
+    # Model a different job registering a keychain while this job signs.
+    if '/fixture/other-job.keychain-db' not in entries:
+        entries.append('/fixture/other-job.keychain-db')
+        pathlib.Path('search-list.json').write_text(json.dumps(entries))
 if name == 'security' and args[0] == 'find-identity':
     team = 'WRONGTEAM1' if failure == 'team' else 'ABCDEFGHIJ'
     print('1) ' + 'A'*40 + ' "Developer ID Application: Test (' + team + ')"')
@@ -127,7 +143,14 @@ if name == 'spctl' and failure == 'gatekeeper':
             calls = (root / 'calls').read_text()
             self.assertIn('security delete-keychain', calls)
             self.assertFalse(list(root.glob('tartdesk-signing.*')))
-            self.assertNotIn('security list-keychains', calls)
+            state = root / 'search-list.json'
+            if state.exists():
+                import json
+                entries = json.loads(state.read_text())
+                expected = ['/fixture/login.keychain-db']
+                if 'codesign --force' in calls:
+                    expected.append('/fixture/other-job.keychain-db')
+                self.assertEqual(entries, expected)
             self.assertNotIn('security default-keychain', calls)
             self.assertNotIn('secret-value-not-for-logs', result.stdout + result.stderr)
             if failure:
