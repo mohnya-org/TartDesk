@@ -107,7 +107,9 @@ Developer ID signed or notarized and are not intended for distribution.
 Release CI uses the organization secrets `APPLE_API_ISSUER_ID`, `APPLE_API_KEY_ID`,
 `APPLE_API_PRIVATE_KEY`, `APPLE_CERT_BASE64`, `APPLE_CERT_PASSWORD`, and
 `APPLE_TEAM_ID`, plus `SPARKLE_PRIVATE_KEY` and `SPARKLE_PUBLIC_ED_KEY` for updates.
-The organization must grant this repository access to those secrets. Missing
+The organization must grant this repository access to those secrets. Do not define
+same-named Apple secrets at repository level: GitHub gives them precedence over
+organization secrets. Certificate Base64 may contain line breaks or ASCII whitespace. Missing
 secrets fail before the build; secret values are never printed.
 
 Distribution builds sign Sparkle's nested components and then TartDesk with a

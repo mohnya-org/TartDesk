@@ -21,7 +21,7 @@ if [[ -n "${GITHUB_ENV:-}" ]]; then
 fi
 # Do not change the user's default keychain or keychain search list.
 password=$(openssl rand -hex 32)
-printf '%s' "$APPLE_CERT_BASE64" | base64 -D > "$work/certificate.p12"
+python3 scripts/release-security.py decode-certificate "$work/certificate.p12"
 printf '%s' "$APPLE_API_PRIVATE_KEY" > "$work/api.p8"
 security create-keychain -p "$password" "$keychain" >/dev/null 2>&1
 security set-keychain-settings -lut 21600 "$keychain" >/dev/null 2>&1
