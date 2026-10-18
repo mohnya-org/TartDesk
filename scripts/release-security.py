@@ -11,11 +11,24 @@ REQUIRED = ('APPLE_API_ISSUER_ID', 'APPLE_API_KEY_ID', 'APPLE_API_PRIVATE_KEY',
             'SPARKLE_PRIVATE_KEY', 'SPARKLE_PUBLIC_ED_KEY')
 
 
+def decode_certificate(value):
+    # Base64 tools commonly wrap certificates or append a final newline.
+    # Ignore ASCII whitespace only; keep rejecting all other invalid characters.
+    try:
+        data = base64.b64decode(re.sub(r'[ \t\r\n\f\v]', '', value), validate=True)
+        if not data:
+            raise ValueError()
+        return data
+    except ValueError:
+        raise ValueError('Invalid secret: APPLE_CERT_BASE64') from None
+
+
 def preflight(env):
     missing = [name for name in REQUIRED if not env.get(name, '').strip()]
     if missing:
         raise ValueError('Missing secrets: ' + ', '.join(missing))
-    for name, size in [('APPLE_CERT_BASE64', None), ('SPARKLE_PUBLIC_ED_KEY', 32)]:
+    decode_certificate(env['APPLE_CERT_BASE64'])
+    for name, size in [('SPARKLE_PUBLIC_ED_KEY', 32)]:
         try:
             data = base64.b64decode(env[name], validate=True)
             if not data or (size and len(data) != size):
@@ -37,6 +50,10 @@ if __name__ == '__main__':
     try:
         if sys.argv[1] == 'preflight':
             preflight(os.environ)
+        elif sys.argv[1] == 'decode-certificate':
+            data = decode_certificate(os.environ.get('APPLE_CERT_BASE64', ''))
+            with open(sys.argv[2], 'wb') as output:
+                output.write(data)
         elif sys.argv[1] == 'archive':
             check_archive(sys.argv[2])
         else:

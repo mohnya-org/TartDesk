@@ -25,6 +25,19 @@ class SecurityTests(unittest.TestCase):
     def test_valid_preflight(self):
         checks.preflight(self.env())
 
+    def test_wrapped_certificate_matches_original_bytes(self):
+        env = self.env()
+        encoded = env['APPLE_CERT_BASE64']
+        env['APPLE_CERT_BASE64'] = ' \t' + '\r\n'.join(encoded[i:i+4] for i in range(0, len(encoded), 4)) + '\n'
+        checks.preflight(env)
+        self.assertEqual(checks.decode_certificate(env['APPLE_CERT_BASE64']), b'certificate')
+
+    def test_certificate_rejects_invalid_characters_and_padding(self):
+        for value in ('YQ==!', 'YQ', ' \n', 'YQ==\u00a0'):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, '^Invalid secret: APPLE_CERT_BASE64$'):
+                    checks.decode_certificate(value)
+
     def test_all_missing_names_reported_without_values(self):
         env = self.env()
         env['APPLE_CERT_PASSWORD'] = ''
@@ -77,6 +90,8 @@ with open('calls', 'a') as log:
 if name == 'security' and args[0] == 'find-identity':
     team = 'WRONGTEAM1' if failure == 'team' else 'ABCDEFGHIJ'
     print('1) ' + 'A'*40 + ' "Developer ID Application: Test (' + team + ')"')
+if name == 'security' and args[0] == 'import':
+    assert pathlib.Path(args[1]).read_bytes() == b'certificate'
 if name == 'security' and args[0] == 'import' and failure == 'import':
     sys.exit(1)
 if name == 'codesign' and args[0] == '-dv':
@@ -102,6 +117,8 @@ if name == 'spctl' and failure == 'gatekeeper':
                 (root / 'bin' / command).symlink_to(mock)
             env = os.environ.copy()
             env.update(SecurityTests().env())
+            encoded = env['APPLE_CERT_BASE64']
+            env['APPLE_CERT_BASE64'] = ' \t' + '\r\n'.join(encoded[i:i+4] for i in range(0, len(encoded), 4)) + '\n'
             env.update(PATH=str(root / 'bin') + ':' + env['PATH'], FAILURE=failure,
                        RUNNER_TEMP=str(root), ZIP_PATH=str(root / 'release.zip'),
                        CHECKSUM_PATH=str(root / 'checksum'), GITHUB_ENV=str(root / 'env'))
