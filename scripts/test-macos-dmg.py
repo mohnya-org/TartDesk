@@ -75,7 +75,7 @@ class DmgTests(unittest.TestCase):
                     shutil.copytree(app,mount/app.name)
                     (mount/'Applications').symlink_to('/Applications')
                 return subprocess.CompletedProcess(args,0,out,b'')
-            with patch.dict(os.environ, dict(ENV, RUNNER_TEMP=str(root), GITHUB_ENV=''), clear=True), patch.object(dmg, 'run', side_effect=fake_run):
+            with patch.dict(os.environ, dict(ENV, RUNNER_TEMP=str(root), GITHUB_ENV=''), clear=True), patch.object(dmg, 'run', side_effect=fake_run), patch.object(dmg, 'build_image', side_effect=lambda app, path: path.write_bytes(b'disk image fixture')), patch.object(dmg, 'verify_design'):
                 if status!='Accepted':
                     with self.assertRaisesRegex(dmg.DistributionError, 'not Accepted'):
                         dmg.create(app,archive)

@@ -111,6 +111,44 @@ def verify_layout(mount, app_name, expected_info):
             raise DistributionError('DMG contains an unexpected app/version')
 
 
+DESIGN_DIR = Path(__file__).resolve().parents[1] / 'packaging/dmg'
+
+
+def build_image(app, dmg):
+    from dmgbuild import build_dmg
+    layout = json.loads((DESIGN_DIR / 'layout.json').read_text())
+    window = layout['window']
+    build_dmg(str(dmg), app.stem, settings={
+        'files': [str(app)], 'symlinks': {'Applications': '/Applications'},
+        'format': 'UDZO', 'filesystem': 'HFS+',
+        'background': str(DESIGN_DIR / 'background.tiff'),
+        'window_rect': ((window['x'], window['y']), (window['width'], window['height'])),
+        'icon_locations': {app.name: tuple(layout['app']), 'Applications': tuple(layout['applications'])},
+        'icon_size': layout['iconSize'], 'text_size': layout['iconTextSize'],
+        'hide_extensions': [app.name], 'default_view': 'icon-view',
+        'show_toolbar': False, 'show_sidebar': False, 'show_status_bar': False,
+        'show_pathbar': False, 'show_tab_view': False,
+        'include_icon_view_settings': True, 'include_list_view_settings': False,
+    })
+
+
+def verify_design(mount, app_name):
+    from ds_store import DSStore
+    layout = json.loads((DESIGN_DIR / 'layout.json').read_text())
+    if (mount / '.background.tiff').read_bytes() != (DESIGN_DIR / 'background.tiff').read_bytes():
+        raise DistributionError('DMG installation background is missing or changed')
+    with DSStore.open(str(mount / '.DS_Store'), 'r') as store:
+        if tuple(store[app_name]['Iloc']) != tuple(layout['app']) or tuple(store['Applications']['Iloc']) != tuple(layout['applications']):
+            raise DistributionError('DMG installation icons are misplaced')
+        window = layout['window']
+        bounds = '{{%d, %d}, {%d, %d}}' % (window['x'], window['y'], window['width'], window['height'])
+        if store['.']['bwsp']['WindowBounds'] != bounds:
+            raise DistributionError('DMG window size or position is invalid')
+        options = store['.']['icvp']
+        if options['backgroundType'] != 2 or options['iconSize'] != layout['iconSize']:
+            raise DistributionError('DMG Finder presentation is invalid')
+
+
 def create(app, dmg):
     preflight()
     app, dmg = Path(app).resolve(), Path(dmg).resolve()
@@ -147,10 +185,8 @@ def create(app, dmg):
         staging = directory / 'image'
         staging.mkdir()
         run(['ditto', app, staging / app.name], 'Copy notarized app')
-        (staging / 'Applications').symlink_to('/Applications')
         dmg.parent.mkdir(parents=True, exist_ok=True)
-        run(['hdiutil', 'create', '-ov', '-format', 'UDZO', '-fs', 'HFS+', '-volname', app.stem,
-             '-srcfolder', staging, dmg], 'DMG creation', timeout=300)
+        build_image(staging / app.name, dmg)
         run(['codesign', '--force', '--sign', identity, '--keychain', keychain, '--timestamp', dmg], 'DMG signing', timeout=180)
         result = run(['xcrun', 'notarytool', 'submit', dmg, '--key', key,
                       '--key-id', os.environ['APPLE_API_KEY_ID'], '--issuer', os.environ['APPLE_API_ISSUER_ID'],
@@ -168,6 +204,7 @@ def create(app, dmg):
         run(['hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, dmg], 'DMG mounting', timeout=120)
         try:
             verify_layout(mount, app.name, info)
+            verify_design(mount, app.name)
             verify_app(mount / app.name, team)
         finally:
             run(['hdiutil', 'detach', mount], 'DMG detach', timeout=120)
