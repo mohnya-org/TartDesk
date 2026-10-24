@@ -98,7 +98,7 @@ def cleanup(directory):
 def verify_app(app, team):
     requirement = ('anchor apple generic and certificate leaf[subject.OU] = "' + team
                    + '" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists')
-    run(['codesign', '--verify', '--deep', '--strict', '-R', requirement, app], 'App signature and team verification')
+    run(['codesign', '--verify', '--deep', '--strict', '-R', '=' + requirement, app], 'App signature and team verification')
     run(['xcrun', 'stapler', 'validate', app], 'App ticket verification', timeout=120)
     run(['spctl', '--assess', '--type', 'execute', app], 'App Gatekeeper assessment', timeout=120)
 
