@@ -15,7 +15,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-import fcntl
+from keychain_lock import keychain_lock
 
 REQUIRED = ('APPLE_CERT_BASE64', 'APPLE_CERT_PASSWORD', 'APPLE_TEAM_ID',
             'APPLE_API_KEY_ID', 'APPLE_API_ISSUER_ID', 'APPLE_API_PRIVATE_KEY')
@@ -61,10 +61,7 @@ def select_identity(output, team):
 
 def register_keychain(keychain):
     # Preserve other jobs' entries and never change the default keychain.
-    fd = os.open(Path(tempfile.gettempdir()) / 'mohnya-dmg-keychain.lock',
-                 os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with keychain_lock():
         current = shlex.split(run(['security', 'list-keychains', '-d', 'user'], 'Keychain list lookup').stdout.decode())
         if str(keychain) not in current:
             run(['security', 'list-keychains', '-d', 'user', '-s', *current, keychain], 'Keychain registration')
@@ -82,7 +79,8 @@ def cleanup(directory):
     keychain = directory / 'signing.keychain-db'
     failed = False
     if keychain.exists():
-        failed = subprocess.run(['security', 'delete-keychain', str(keychain)], capture_output=True).returncode != 0
+        with keychain_lock():
+            failed = subprocess.run(['security', 'delete-keychain', str(keychain)], capture_output=True).returncode != 0
     for path in directory.iterdir():
         if failed and path.name.startswith('signing.keychain'):
             continue
@@ -136,7 +134,8 @@ def create(app, dmg):
         cert.chmod(0o600)
         key.chmod(0o600)
         password = secrets.token_urlsafe(32)
-        run(['security', 'create-keychain', '-p', password, keychain], 'Keychain creation')
+        with keychain_lock():
+            run(['security', 'create-keychain', '-p', password, keychain], 'Keychain creation')
         run(['security', 'set-keychain-settings', '-lut', '21600', keychain], 'Keychain settings')
         run(['security', 'unlock-keychain', '-p', password, keychain], 'Keychain unlock')
         run(['security', 'import', cert, '-k', keychain, '-P', os.environ['APPLE_CERT_PASSWORD'],

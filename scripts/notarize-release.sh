@@ -10,7 +10,7 @@ work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/tartdesk-signing.XXXXXXXX")
 keychain="$work/signing.keychain-db"
 cleanup() {
   python3 scripts/signing-keychain.py detach "$keychain" || true
-  security delete-keychain "$keychain" >/dev/null 2>&1 || true
+  python3 scripts/keychain_lock.py delete-keychain "$keychain" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT
@@ -24,7 +24,7 @@ fi
 password=$(openssl rand -hex 32)
 python3 scripts/release-security.py decode-certificate "$work/certificate.p12"
 printf '%s' "$APPLE_API_PRIVATE_KEY" > "$work/api.p8"
-security create-keychain -p "$password" "$keychain" >/dev/null 2>&1
+python3 scripts/keychain_lock.py create-keychain -p "$password" "$keychain" >/dev/null 2>&1
 security set-keychain-settings -lut 21600 "$keychain" >/dev/null 2>&1
 security unlock-keychain -p "$password" "$keychain" >/dev/null 2>&1
 security import "$work/certificate.p12" -k "$keychain" -P "$APPLE_CERT_PASSWORD" \

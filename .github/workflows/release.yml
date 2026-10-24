@@ -43,6 +43,7 @@ jobs:
           python3 -B scripts/test-release-version.py
           python3 -B scripts/test-publish-release.py
           python3 -B scripts/test-macos-dmg.py
+          python3 -B scripts/test-keychain-lock.py
           python3 -B scripts/test-release-security.py
 
       - name: Resolve release metadata
@@ -165,7 +166,7 @@ jobs:
           if [[ -n "${SIGNING_TEMP_DIR:-}" && -d "$SIGNING_TEMP_DIR" ]]; then
             cleanup_status=0
             python3 scripts/signing-keychain.py detach "$SIGNING_TEMP_DIR/signing.keychain-db" || cleanup_status=$?
-            security delete-keychain "$SIGNING_TEMP_DIR/signing.keychain-db" >/dev/null 2>&1 || true
+            python3 scripts/keychain_lock.py delete-keychain "$SIGNING_TEMP_DIR/signing.keychain-db" >/dev/null 2>&1 || true
             rm -rf "$SIGNING_TEMP_DIR"
             exit "$cleanup_status"
           fi
