@@ -8,10 +8,10 @@ If Tart is not installed, TartDesk shows an install screen on launch and can ins
 
 ## Download
 
-The latest signed app bundle is available from [GitHub Releases](https://github.com/Moomo/TartDesk/releases).
+The latest signed app bundle is available from [GitHub Releases](https://github.com/mohnya-org/TartDesk/releases).
 
-1. Download the latest `.zip` from Releases.
-2. Extract `TartDesk.app`.
+1. Download the latest `.dmg` from Releases and open it in Finder.
+2. Locate `TartDesk.app` in the mounted image.
 3. Drag and drop `TartDesk.app` into your `Applications` folder.
 4. Launch `TartDesk`. If `Tart` is missing, the app will prompt you to install it and can run the Homebrew install command for you.
 5. Install `Tart` manually if you prefer:
@@ -136,3 +136,44 @@ See the official `Tart` repository and its license for details:
 
 - <https://github.com/cirruslabs/tart>
 - <https://github.com/cirruslabs/tart/blob/main/LICENSE>
+
+## First installation: signed DMG
+
+Releases include a signed, notarized `<app>-<version>-macOS.dmg` and its SHA-256 checksum.
+Open the DMG in Finder, drag the app onto its Applications shortcut, eject the image,
+and launch the installed app from Applications. Sparkle continues to use the ZIP and appcast.
+Do not launch the app directly from the mounted image.
+
+The DMG uses the existing `APPLE_CERT_BASE64` / `APPLE_CERT_PASSWORD` Developer ID
+Application identity and `APPLE_TEAM_ID`. Notarization reuses `APPLE_API_KEY_ID`,
+`APPLE_API_ISSUER_ID`, and `APPLE_API_PRIVATE_KEY`; no separate DMG certificate or API key
+is needed. Apple Distribution certificates are not a substitute for Developer ID Application.
+The workflow uses a private temporary keychain without changing the default keychain.
+It signs and notarizes the image, staples its ticket, then mounts it read-only to verify
+Gatekeeper acceptance, the embedded app signature/version, and the Applications shortcut.
+All ZIP, DMG, checksum, and appcast files must exist before publication.
+
+To validate a trusted branch without publishing, manually dispatch `release.yml`
+with `validate_only=true`. This uses signing secrets but creates no tag or release.
+The verified DMG is retained as a workflow artifact for seven days. Offline DMG tests:
+`python3 -B scripts/test-macos-dmg.py`.
+
+Prefer organization secrets scoped to selected repositories or protected environments.
+Inventory all consumers before narrowing existing all-repository access. Never copy another
+organization's private keys into this project. Secret names alone do not establish certificate
+validity; successful signing and notarization are required verification.
+
+## Future PKG distribution
+
+PKG creation is not enabled. It requires a separate **Developer ID Installer** certificate,
+in addition to the Developer ID Application certificate that signs the bundled app.
+An account holder should create it in Apple Developer, export it with its private key as a
+password-protected `.p12`, and configure `APPLE_INSTALLER_CERT_BASE64` and
+`APPLE_INSTALLER_CERT_PASSWORD` for the intended repositories. Do not replace the existing
+Application certificate secrets. The current notarization API credentials can be reused;
+a new App Store Connect app record or API key is not required just to add PKG packaging.
+
+A future PKG workflow must sign with that Installer identity, notarize and staple the package,
+and verify it with `pkgutil --check-signature`, `stapler validate`, and Gatekeeper's install
+assessment before publication. Test installation and subsequent Sparkle updates on a clean Mac.
+See [Apple's Developer ID certificate guide](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/).
