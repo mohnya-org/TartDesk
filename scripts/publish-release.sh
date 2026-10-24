@@ -38,6 +38,9 @@ fi
 if [[ "$state" == missing ]]; then
   gh release create "$TAG" --verify-tag --target "$sha" --draft --title "$TAG" --generate-notes
 fi
+# Read the actual draft body (including edits on retries), not a second changelog.
+gh release view "$TAG" --json body,url > "$release_list"
+python3 -B "$(dirname "$0")/release-notes-appcast.py" dist/appcast.xml "$release_list"
 gh release upload "$TAG" "${assets[@]}" --clobber
 # Publication happens only after every upload succeeds, so release webhooks see complete assets.
 gh release edit "$TAG" --draft=false --latest
