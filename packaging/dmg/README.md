@@ -1,7 +1,7 @@
 # Shared DMG installation background
 
 This app-neutral artwork is shared byte-for-byte by PrismWindow, FinderOne,
-TartDesk and Lingly. A dimensional arrow and flowing light indicate dragging the
+TartDesk and Lingly. A restrained matte arrow indicates dragging the
 real app icon on the left to the real Applications link on the right. Neither
 icon is painted into the background. The only text is “Drag to install”.
 
