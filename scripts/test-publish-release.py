@@ -40,9 +40,10 @@ class PublishTests(unittest.TestCase):
             p=self.root/'bin'/tool
             p.write_text(FAKE)
             p.chmod(0o755)
-        for name in ('app.zip','app.zip.sha256','appcast.xml'):
+        for name in ('app.zip','app.zip.sha256','appcast.xml','app.dmg','app.dmg.sha256'):
             (self.root/'dist'/name).write_text('fixture')
         self.env=dict(os.environ, FAKE_STATE=str(self.root), PATH=str(self.root/'bin')+os.pathsep+os.environ['PATH'], TAG='v1.2.4', GITHUB_REPOSITORY='owner/app', ZIP_PATH=str(self.root/'dist/app.zip'), CHECKSUM_PATH=str(self.root/'dist/app.zip.sha256'))
+        self.env['DMG_PATH']=str(self.root/'dist/app.dmg')
         self.save(tag=None, release='missing')
 
     def save(self, **state):
@@ -66,6 +67,8 @@ class PublishTests(unittest.TestCase):
         self.assertIn('dist/appcast.xml',upload)
         self.assertIn(self.env['ZIP_PATH'],upload)
         self.assertIn(self.env['CHECKSUM_PATH'],upload)
+        self.assertIn(self.env['DMG_PATH'],upload)
+        self.assertIn(self.env['DMG_PATH']+'.sha256',upload)
 
     def test_upload_failure_stays_draft_then_retry_finishes(self):
         self.save(tag=None,release='missing',fail_upload=True)
@@ -87,6 +90,11 @@ class PublishTests(unittest.TestCase):
         self.save(tag='commit-b',release='missing')
         self.assertNotEqual(self.run_script().returncode,0)
         self.assertFalse(any(c[0]=='gh' for c in self.calls()))
+
+    def test_missing_dmg_creates_no_tag(self):
+        (self.root/'dist/app.dmg').unlink()
+        self.assertNotEqual(self.run_script().returncode,0)
+        self.assertFalse((self.root/'calls').exists())
 
     def test_missing_asset_creates_no_tag(self):
         (self.root/'dist/appcast.xml').unlink()

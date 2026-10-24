@@ -4,8 +4,10 @@ set -euo pipefail
 : "${ZIP_PATH:?}"
 : "${CHECKSUM_PATH:?}"
 : "${GITHUB_REPOSITORY:?}"
-# All three assets must exist before creating a tag or a draft.
-for asset in "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml; do
+: "${DMG_PATH:?}"
+assets=("$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml "$DMG_PATH" "$DMG_PATH.sha256")
+# All update and first-install assets must exist before publishing.
+for asset in "${assets[@]}"; do
   [[ -s "$asset" ]] || { echo "Missing release asset: $asset" >&2; exit 1; }
 done
 sha=$(git rev-parse HEAD)
@@ -36,6 +38,6 @@ fi
 if [[ "$state" == missing ]]; then
   gh release create "$TAG" --verify-tag --target "$sha" --draft --title "$TAG" --generate-notes
 fi
-gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml --clobber
+gh release upload "$TAG" "${assets[@]}" --clobber
 # Publication happens only after every upload succeeds, so release webhooks see complete assets.
 gh release edit "$TAG" --draft=false --latest
