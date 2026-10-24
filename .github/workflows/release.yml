@@ -132,6 +132,19 @@ jobs:
           SPARKLE_BIN: .build/artifacts/sparkle/Sparkle/bin
         run: bash scripts/generate-appcast.sh
 
+      - name: Set up Python for DMG layout
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install pinned DMG layout tools
+        run: |
+          set -euo pipefail
+          tools_dir="$(mktemp -d "$RUNNER_TEMP/dmg-tools.XXXXXX")"
+          echo "DMG_TOOLS_DIR=$tools_dir" >> "$GITHUB_ENV"
+          python3 -m venv "$tools_dir"
+          "$tools_dir/bin/python" -m pip install --disable-pip-version-check --require-hashes -r scripts/dmg-requirements.txt
+
       - name: Create signed and notarized first-install DMG
         timeout-minutes: 35
         env:
@@ -141,7 +154,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
-        run: python3 -B scripts/macos-dmg.py create "dist/TartDesk.app" "$DMG_PATH"
+        run: '"$DMG_TOOLS_DIR/bin/python" -B scripts/macos-dmg.py create "dist/TartDesk.app" "$DMG_PATH"'
 
       - name: Keep validated installers for verification runs
         if: inputs.validate_only
@@ -177,3 +190,8 @@ jobs:
           if [[ -n "${DMG_SIGNING_TEMP_DIR:-}" ]]; then
             python3 -B scripts/macos-dmg.py cleanup "$DMG_SIGNING_TEMP_DIR"
           fi
+
+      - name: Cleanup DMG layout tools
+        if: always()
+        run: |
+          if [[ -n "${DMG_TOOLS_DIR:-}" ]]; then rm -rf "$DMG_TOOLS_DIR"; fi
