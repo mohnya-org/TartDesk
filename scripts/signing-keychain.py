@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
 """Temporarily register a signing keychain without replacing other jobs' entries."""
-import fcntl
+from keychain_lock import keychain_lock
 import os
-from pathlib import Path
 import shlex
 import subprocess
 import sys
-import tempfile
 
 
 def update_search_list(keychain, add):
-    # Serialize read/modify/write among TartDesk jobs sharing this runner user.
-    lock_path = Path(tempfile.gettempdir()) / 'tartdesk-keychain-search.lock'
-    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with keychain_lock():
         result = subprocess.run(['security', 'list-keychains', '-d', 'user'],
                                 check=True, capture_output=True, text=True)
         current = shlex.split(result.stdout)
